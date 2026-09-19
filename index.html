@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Sistema de facturación y comisiones para vendedores">
+  <title>Facturacion</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Material+Symbols+Rounded&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <link rel="icon" href="assets/img/favicon.svg">
+</head>
+<body>
+  <section class="login-page" id="login-view">
+    <form class="card login-card" id="login-form">
+      <div class="brand"><span class="brand-mark material-symbols-rounded">receipt_long</span><span><strong>Facturacion</strong></span></div>
+      <h1>Bienvenido</h1><p>Ingresa para gestionar tus facturas y comisiones.</p>
+      <div class="snackbar error" id="login-error" role="alert" hidden></div>
+      <div class="field"><label for="login-user">Usuario</label><input id="login-user" autocomplete="username" maxlength="50" required></div>
+      <div class="field" style="margin-top:1rem"><label for="login-password">Contraseña</label><input id="login-password" type="password" autocomplete="current-password" required></div>
+      <button class="button" type="submit"><span class="material-symbols-rounded">login</span>Ingresar</button>
+      <div class="demo-note"><strong>Acceso inicial:</strong> vendedor / password</div>
+    </form>
+  </section>
+
+  <div class="app-shell" id="application" hidden>
+    <aside class="navigation" id="navigation">
+      <a class="brand" href="#dashboard"><span class="brand-mark material-symbols-rounded">receipt_long</span><span><strong>Facturacion</strong></span></a>
+      <nav aria-label="Navegación principal">
+        <a class="nav-item" data-page="dashboard" href="#dashboard"><span class="material-symbols-rounded">space_dashboard</span>Resumen</a>
+        <a class="nav-item" data-page="invoice" href="#invoice"><span class="material-symbols-rounded">note_add</span>Nueva factura</a>
+        <a class="nav-item" data-page="history" href="#history"><span class="material-symbols-rounded">receipt</span>Facturas</a>
+        <a class="nav-item" data-page="products" href="#products"><span class="material-symbols-rounded">inventory_2</span>Productos</a>
+      </nav>
+      <div class="seller-mini"><span class="avatar" id="seller-avatar"></span><span><strong id="seller-name"></strong><small>Vendedor</small></span></div>
+      <button class="nav-item logout" id="logout-button" type="button"><span class="material-symbols-rounded">logout</span>Cerrar sesión</button>
+    </aside>
+    <main class="content">
+      <header class="topbar">
+        <button class="icon-button menu-button" id="menu-button" type="button" aria-label="Abrir menú"><span class="material-symbols-rounded">menu</span></button>
+        <div><p class="eyebrow">Sistema de facturación</p><h1 id="page-title">Resumen</h1></div>
+        <span class="date-chip"><span class="material-symbols-rounded">calendar_today</span><span id="current-date"></span></span>
+      </header>
+      <div class="snackbar" id="notice" role="status" hidden></div>
+      <div id="page-content"></div>
+    </main>
+  </div>
+
+  <template id="dashboard-template">
+    <section class="banner" id="birthday-banner" hidden><span class="material-symbols-rounded">celebration</span><div><h2 id="birthday-message"></h2><p id="birthday-name"></p></div></section>
+    <section class="grid stats" id="dashboard-stats"></section>
+    <section class="grid two" style="margin-top:1rem">
+      <article class="card"><div class="profile-date"><span class="material-symbols-rounded">cake</span><div><strong>Fecha de nacimiento</strong><p id="birth-date"></p></div></div><div class="age-line" id="seller-age"></div></article>
+      <article class="card tonal"><h2 style="margin-top:0">Registra una venta</h2><p>El IVA y la comisión se calculan automáticamente con JavaScript.</p><a class="button" href="#invoice"><span class="material-symbols-rounded">add</span>Nueva factura</a></article>
+    </section>
+    <div class="section-head"><div><h2>Facturas recientes</h2><p>Últimos documentos procesados</p></div><a class="button text" href="#history">Ver todas</a></div><div id="recent-invoices"></div>
+  </template>
+
+  <template id="products-template">
+    <div class="grid two"><form class="card" id="product-form"><h2 style="margin-top:0">Agregar producto</h2><p class="hint">JavaScript asignará el siguiente código permanente.</p><div class="field"><label for="product-description">Descripción</label><input id="product-description" maxlength="160" required></div><div class="field" style="margin-top:1rem"><label for="product-price">Precio unitario (USD)</label><input id="product-price" type="number" min="0.01" step="0.01" required></div><div class="actions"><button class="button" type="submit"><span class="material-symbols-rounded">save</span>Guardar producto</button></div></form><section class="card tonal"><span class="material-symbols-rounded" style="font-size:2.2rem">qr_code_2</span><h2>Correlativo permanente</h2><p>Formato <strong>PROD-000001</strong>, generado con JavaScript.</p></section></div>
+    <div class="section-head"><div><h2>Catálogo</h2><p id="product-count"></p></div></div><div id="product-list"></div>
+  </template>
+
+  <template id="invoice-template">
+    <form id="invoice-form"><div class="invoice-layout"><div><section class="card"><div class="form-grid"><div class="field"><label for="invoice-date">Fecha</label><input id="invoice-date" type="date" required></div><div class="field"><label for="invoice-branch">Sucursal</label><select id="invoice-branch" required></select></div><div class="field full"><label>Vendedor</label><input id="invoice-seller" readonly></div></div></section><div class="section-head"><div><h2>Productos</h2><p>Agrega los artículos incluidos en la venta</p></div><button class="button secondary" id="add-line" type="button"><span class="material-symbols-rounded">add</span>Agregar producto</button></div><div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cantidad</th><th class="amount">Precio</th><th class="amount">Total</th><th></th></tr></thead><tbody id="invoice-lines"></tbody></table></div></div><aside class="card summary-card"><h2 style="margin-top:0">Resumen</h2><div class="summary-row"><span>Subtotal sin IVA</span><strong id="subtotal">$0.00</strong></div><div class="summary-row"><span>IVA (13%)</span><strong id="tax">$0.00</strong></div><div class="summary-row total"><span>Total</span><span id="grand-total">$0.00</span></div><div class="commission-box"><span>Tu comisión: <b id="commission-rate">1%</b></span><strong id="commission">$0.00</strong><small>Calculada sobre el subtotal sin IVA</small></div><div class="actions"><button class="button" type="submit"><span class="material-symbols-rounded">check_circle</span>Procesar factura</button></div></aside></div></form>
+  </template>
+
+  <template id="history-template"><div class="section-head"><div><h2>Historial de facturas</h2><p id="invoice-count"></p></div><a class="button" href="#invoice"><span class="material-symbols-rounded">add</span>Nueva factura</a></div><div id="invoice-list"></div></template>
+  <script type="module" src="assets/js/principal.js?v=2"></script>
+</body>
+</html>
