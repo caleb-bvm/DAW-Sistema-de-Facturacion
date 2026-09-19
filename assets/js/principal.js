@@ -201,6 +201,9 @@ function calculateInvoice() {
   document.querySelector('#grand-total').textContent = currency.format(result.total);
   document.querySelector('#commission-rate').textContent = `${result.porcentajeComision}%`;
   document.querySelector('#commission').textContent = currency.format(result.commission);
+  document.querySelectorAll('[data-commission-rate]').forEach((row) => {
+    row.classList.toggle('active-rate', Number(row.dataset.commissionRate) === result.porcentajeComision);
+  });
 }
 
 async function saveInvoice(event) {

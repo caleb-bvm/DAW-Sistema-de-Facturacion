@@ -12,10 +12,13 @@ Sistema académico de facturación desarrollado con JavaScript y MySQL. Toda la 
 
 También puedes abrir `index.html` con Live Server en `http://127.0.0.1:5500`. Apache y MySQL deben permanecer iniciados porque las consultas a la base de datos se envían a `http://localhost/facturacion/api/index.php`.
 
-Acceso inicial:
+Accesos iniciales:
 
-- Usuario: `vendedor`
-- Contraseña: `password`
+- Vendedor de prueba: `vendedor`
+- Caleb Ortiz: `caleb.ortiz`
+- Ivania Guerrero: `ivania.guerrero`
+- Ana Carrillo: `ana.carrillo`
+- Contraseña temporal para todos: `password`
 
 ## Reglas principales
 
