@@ -17,6 +17,14 @@
 }
 
 * { box-sizing: border-box; }
+button:disabled { opacity: .55; cursor: wait; }
+.check-field { display: flex; align-items: center; gap: .65rem; padding: .7rem 0; }
+.check-field input { width: 1.2rem; height: 1.2rem; accent-color: var(--primary); }
+.service-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .7rem; }
+.service-grid span { padding: .8rem; background: var(--surface-container); border-radius: .8rem; }
+.schedule-row { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-top: .8rem; }
+.schedule-row select, .schedule-row input { min-height: 2.7rem; border: 1px solid var(--outline); border-radius: .7rem; padding: .5rem; }
+.schedule-row input { max-width: 10rem; }
 [hidden] { display: none !important; }
 body { margin: 0; font-family: Manrope, sans-serif; color: var(--text); background: var(--surface); font-size: 16px; }
 button, input, select { font: inherit; }
