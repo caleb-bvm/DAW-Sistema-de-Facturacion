@@ -1,3 +1,4 @@
+import { withLogContext } from './log-context.js';
 import { isUniqueViolation } from './db.js';
 import http from 'node:http';
 import path from 'node:path';
@@ -6,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { config, root } from './config.js';
 import { RequestError, requireValue, object } from './validation.js';
 import { dispatch } from './api.js';
-import { matchesNetworks, sessionCookie } from './access.js';
+import { matchesNetworks, sessionCookie, requestIp } from './access.js';
 import { pool } from './db.js';
 import { processMail } from './mail.js';
 
@@ -41,7 +42,7 @@ export function createApplication() {
         requireValue(!origin || allowed.includes(origin), 'Origen no autorizado.', 403);
         requireValue(['GET', 'POST'].includes(request.method), 'Método no permitido.', 405);
         const data = request.method === 'POST' ? await body(request) : {};
-        const result = await dispatch(request, response, url, data); if (result !== undefined) json(response, result); return;
+        const result = await withLogContext({origen:'web',ip:requestIp(request),metodo:request.method,operacion:(url.searchParams.get('action')||'').slice(0,80)},()=>dispatch(request, response, url, data)); if (result !== undefined) json(response, result); return;
       }
       requireValue(['GET', 'HEAD'].includes(request.method), 'Método no permitido.', 405);
       const pathname = decodeURIComponent(url.pathname); const relative = pathname === '/' || pathname === '/index.html' ? 'index.html' : pathname.slice(1);

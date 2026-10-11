@@ -19,7 +19,9 @@ try {
   if (tables.recordset.length) throw new Error('La base ya tiene tablas. Usa db:migrate para una estructura base de SQL Server existente.');
   await executeSqlBatches(await readFile(path.join(root,'database/schema.sql'),'utf8'),tx);
   await executeSqlBatches(await readFile(path.join(root,'database/migrations/001_acceso_y_comprobantes.sql'),'utf8'),tx);
-  await new sql.Request(tx).query("CREATE TABLE schema_migrations (nombre NVARCHAR(100) PRIMARY KEY,fecha DATETIME2(0) NOT NULL DEFAULT SYSUTCDATETIME()); INSERT INTO schema_migrations(nombre) VALUES (N'001_acceso_y_comprobantes');");
+  await executeSqlBatches(await readFile(path.join(root,'database/migrations/002_correos_administrables.sql'),'utf8'),tx);
+  await executeSqlBatches(await readFile(path.join(root,'database/migrations/003_detalle_auditoria.sql'),'utf8'),tx);
+  await new sql.Request(tx).query("CREATE TABLE schema_migrations (nombre NVARCHAR(100) PRIMARY KEY,fecha DATETIME2(0) NOT NULL DEFAULT SYSUTCDATETIME()); INSERT INTO schema_migrations(nombre) VALUES (N'001_acceso_y_comprobantes'), (N'002_correos_administrables'), (N'003_detalle_auditoria');");
   await tx.commit();
   console.log('Base SQL Server creada. Ejecuta setup para crear admin. Usuarios de demostración inactivos.');
 } catch(error) { if(!rolledBack) await tx.rollback(); throw error; }

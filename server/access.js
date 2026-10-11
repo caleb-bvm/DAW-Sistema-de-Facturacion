@@ -5,6 +5,7 @@ import { open } from 'maxmind';
 import { config } from './config.js';
 import { isUniqueViolation, query, sqlNow } from './db.js';
 import { RequestError } from './validation.js';
+import { adminAlertEmail } from './settings.js';
 
 export const tokenHash = (token) => createHash('sha256').update(token).digest('hex');
 export const normalizeIp = (ip) => /^::ffff:\d+\.\d+\.\d+\.\d+$/i.test(ip) ? ip.slice(7) : ip;
@@ -77,10 +78,11 @@ export async function restriction(user, location) {
 }
 export async function recordAttempt(username, userId, reason, location) {
   const result = await query('INSERT INTO intentos_acceso (vendedor_id,usuario,ip,pais,fuente,motivo,fecha) VALUES (?,?,?,?,?,?,?)', [userId, username.slice(0, 50), location.ip, location.country, location.source, reason, sqlNow()]);
-  if (!config.adminEmail) return;
+  const alertEmail = await adminAlertEmail();
+  if (!alertEmail) return;
   const key = tokenHash(`${username}|${location.ip}|${reason}|${Math.floor(Date.now() / 300000)}`);
   const clock = localClock(); const body = `Intento rechazado.\nUsuario: ${username}\nFecha: ${clock.date} ${clock.time} (${config.timezone})\nIP: ${location.ip}\nPaís: ${location.country || 'Desconocido'}\nFuente: ${location.source}\nMotivo: ${reason}`;
-  try { await query("INSERT INTO correos (tipo,destinatario,asunto,cuerpo,clave_unica,intento_id) VALUES ('alerta',?,?,?,?,?)", [config.adminEmail, 'Alerta de acceso al sistema', body, key, result.insertId]); } catch (error) { if (!isUniqueViolation(error)) throw error; }
+  try { await query("INSERT INTO correos (tipo,destinatario,asunto,cuerpo,clave_unica,intento_id) VALUES ('alerta',?,?,?,?,?)", [alertEmail, 'Alerta de acceso al sistema', body, key, result.insertId]); } catch (error) { if (!isUniqueViolation(error)) throw error; }
 }
 export function publicUser(user) { return Object.fromEntries(['id', 'nombre', 'usuario', 'fecha_nacimiento', 'rol'].map((key) => [key, user[key]])); }
 export async function revokeSessions(id, connection) { await query('DELETE FROM sesiones WHERE vendedor_id=?', [id], connection); }

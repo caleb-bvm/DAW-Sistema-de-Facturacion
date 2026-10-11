@@ -1,10 +1,11 @@
+import { currentLogContext } from './log-context.js';
 import { query, transaction, sqlNow, isUniqueViolation } from './db.js';
 import { config } from './config.js';
 import { integer, requireValue, textValue, validDate, validEmail, object } from './validation.js';
 import { cents, money, calculateLine, calculateInvoice } from './calculations.js';
 import { localClock } from './access.js';
 
-export async function audit(userId, action, reference, connection) { await query('INSERT INTO auditoria (vendedor_id,accion,referencia,fecha) VALUES (?,?,?,?)', [userId, action, String(reference), sqlNow()], connection); }
+export async function audit(userId, action, reference, connection, details = {}) { await query('INSERT INTO auditoria (vendedor_id,accion,referencia,fecha,detalles) VALUES (?,?,?,?,?)', [userId, action, String(reference), sqlNow(), JSON.stringify({...currentLogContext(),...details})], connection); }
 export async function invoiceData(id, user = null, connection) {
   const [invoice] = await query('SELECT f.*,s.nombre sucursal,s.direccion,v.nombre vendedor FROM facturas f JOIN sucursales s ON s.id=f.sucursal_id JOIN vendedores v ON v.id=f.vendedor_id WHERE f.id=?', [id], connection);
   requireValue(invoice && (!user || user.rol === 'administrador' || String(invoice.vendedor_id) === String(user.id)), 'Documento no encontrado.', 404);
@@ -21,14 +22,22 @@ export async function createInvoice(data, user) {
   const date = textValue(data, 'fecha', 10); requireValue(validDate(date) && date <= localClock().date, 'Selecciona una fecha válida, sin fechas futuras.');
   const type = data.tipo; requireValue(['CF', 'CCF'].includes(type), 'Selecciona el tipo de comprobante.');
   requireValue(['contado', 'credito'].includes(data.condicion) && ['efectivo', 'tarjeta', 'transferencia'].includes(data.forma_pago), 'Condición o forma de pago inválida.');
-  const clientId = integer(data.cliente_id); const branchId = integer(data.sucursal_id);
+  const clientId = data.cliente_id == null || data.cliente_id === '' || data.cliente_id === 0 ? null : integer(data.cliente_id);
+  requireValue(type !== 'CCF' || clientId !== null, 'El crédito fiscal requiere seleccionar un cliente contribuyente.');
+  const guestEmail = clientId === null ? textValue(data, 'correo', 254, false) : '';
+  requireValue(!guestEmail || validEmail(guestEmail), 'Ingresa un correo electrónico válido para enviar la factura.');
+  const branchId = integer(data.sucursal_id);
   const requestId = textValue(data, 'solicitud_id', 36); requireValue(/^[a-f0-9-]{36}$/.test(requestId), 'Identificador de solicitud inválido.');
   requireValue(Array.isArray(data.detalles) && data.detalles.length >= 1 && data.detalles.length <= 100, 'Agrega entre uno y cien productos.');
-  const existing = await query('SELECT id,numero,vendedor_id FROM facturas WHERE solicitud_id=?', [requestId]);
-  if (existing.length) { requireValue(String(existing[0].vendedor_id) === String(user.id), 'Solicitud inválida.', 409); return { id: existing[0].id, numero: existing[0].numero, correo: 'pendiente' }; }
+  const existing = await query('SELECT f.id,f.numero,f.vendedor_id,(SELECT TOP (1) estado FROM correos WHERE factura_id=f.id ORDER BY id DESC) correo FROM facturas f WHERE solicitud_id=?', [requestId]);
+  if (existing.length) { requireValue(String(existing[0].vendedor_id) === String(user.id), 'Solicitud inválida.', 409); return { id: existing[0].id, numero: existing[0].numero, correo: existing[0].correo || 'sin_envio' }; }
   try {
     return await transaction(async (connection) => {
-      const [client] = await query('SELECT * FROM clientes WHERE id=?', [clientId], connection); requireValue(client && validEmail(client.correo), 'Selecciona un cliente con correo válido.');
+      let client = { nombre: 'Consumidor final', correo: guestEmail };
+      if (clientId !== null) {
+        [client] = await query('SELECT * FROM clientes WHERE id=?', [clientId], connection);
+        requireValue(client && validEmail(client.correo), 'Selecciona un cliente con correo válido.');
+      }
       if (type === 'CCF') requireValue(Number(client.contribuyente) && client.nit && client.nrc && client.actividad && client.direccion, 'El CCF requiere cliente contribuyente, NIT, NRC, actividad y dirección.');
       const [branch] = await query('SELECT id FROM sucursales WHERE id=? AND activo=1', [branchId], connection); requireValue(branch, 'Sucursal inválida.');
       const details = []; const seen = new Set();
@@ -45,13 +54,14 @@ export async function createInvoice(data, user) {
       await query('UPDATE facturas SET numero=? WHERE id=?', [number, id], connection);
       const keys = ['producto_id', 'codigo_producto', 'descripcion', 'cantidad', 'precio_unitario', 'total_linea', 'descuento', 'clasificacion', 'iva_porcentaje', 'subtotal', 'iva', 'comision_porcentaje', 'comision'];
       for (const line of details) await query(`INSERT INTO factura_detalles (factura_id,${keys.join(',')}) VALUES (${Array(keys.length + 1).fill('?').join(',')})`, [id, ...keys.map((key) => line[key])], connection);
-      await queueInvoice({ id, numero: number, cliente_snapshot: JSON.stringify(client) }, connection); await audit(user.id, `emitir_${type}`, number, connection);
-      return { id, numero: number, correo: 'pendiente' };
+      if (client.correo) await queueInvoice({ id, numero: number, cliente_snapshot: JSON.stringify(client) }, connection);
+      await audit(user.id, `emitir_${type}`, number, connection);
+      return { id, numero: number, correo: client.correo ? 'pendiente' : 'sin_envio' };
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
-      const [previous] = await query('SELECT id,numero,vendedor_id FROM facturas WHERE solicitud_id=?', [requestId]);
-      if (previous && String(previous.vendedor_id) === String(user.id)) return { id: previous.id, numero: previous.numero, correo: 'pendiente' };
+      const [previous] = await query('SELECT f.id,f.numero,f.vendedor_id,(SELECT TOP (1) estado FROM correos WHERE factura_id=f.id ORDER BY id DESC) correo FROM facturas f WHERE solicitud_id=?', [requestId]);
+      if (previous && String(previous.vendedor_id) === String(user.id)) return { id: previous.id, numero: previous.numero, correo: previous.correo || 'sin_envio' };
     }
     throw error;
   }

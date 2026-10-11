@@ -5,6 +5,7 @@ import { integer, textValue, requireValue, validDate, flag, validEmail, object }
 import { hashPassword } from './passwords.js';
 import { revokeSessions, localClock } from './access.js';
 import { audit } from './invoices.js';
+import { adminAlertEmail } from './settings.js';
 
 export async function saveClient(data, user) {
   const name = textValue(data, 'nombre'); const email = textValue(data, 'correo', 254); requireValue(validEmail(email), 'Correo del cliente inválido.');
@@ -19,19 +20,22 @@ export async function saveClient(data, user) {
   await audit(user.id, 'guardar_cliente', id); return { id };
 }
 export async function adminData() {
-  const [users, schedules, blocks, holidays, attempts, emails, events] = await Promise.all([
-    query('SELECT id,nombre,usuario,fecha_nacimiento,rol,activo,bloqueado_permanente,remoto,motivo_bloqueo FROM vendedores ORDER BY nombre'),
+  const [users, schedules, blocks, holidays, attempts, emails, events, alertEmail] = await Promise.all([
+    query('SELECT id,nombre,usuario,correo,fecha_nacimiento,rol,activo,bloqueado_permanente,remoto,motivo_bloqueo FROM vendedores ORDER BY nombre'),
     query('SELECT * FROM horarios_acceso ORDER BY vendedor_id,dia,inicio'), query('SELECT b.*,v.nombre FROM bloqueos_acceso b JOIN vendedores v ON v.id=b.vendedor_id ORDER BY b.inicio DESC'),
     query('SELECT * FROM festivos ORDER BY fecha'), query('SELECT TOP (200) * FROM intentos_acceso ORDER BY id DESC'),
     query('SELECT TOP (200) id,factura_id,tipo,destinatario,estado,intentos,error,updated_at FROM correos ORDER BY id DESC'),
     query('SELECT TOP (200) a.*,v.nombre FROM auditoria a JOIN vendedores v ON v.id=a.vendedor_id ORDER BY a.id DESC'),
+    adminAlertEmail(),
   ]);
   const displayTime = (value) => { const c = localClock(new Date(value.replace(' ', 'T') + 'Z')); return `${c.date} ${c.time}`; };
-  return { usuarios: users, horarios: schedules, bloqueos: blocks, festivos: holidays, intentos: attempts.map((row) => ({ ...row, fecha: displayTime(row.fecha) })), correos: emails.map((row) => ({ ...row, updated_at: displayTime(row.updated_at) })), auditoria: events.map((row) => ({ ...row, fecha: displayTime(row.fecha) })), configuracion: { pais: config.country, zona_horaria: config.timezone, redes: config.officeNetworks, smtp_configurado: validEmail(config.mailFrom), alertas_configuradas: validEmail(config.adminEmail), pdf_disponible: true, geoip_disponible: Boolean(config.geoipDatabase && existsSync(config.geoipDatabase)), emisor: config.company } };
+  return { usuarios: users, horarios: schedules, bloqueos: blocks, festivos: holidays, intentos: attempts.map((row) => ({ ...row, fecha: displayTime(row.fecha) })), correos: emails.map((row) => ({ ...row, updated_at: displayTime(row.updated_at) })), auditoria: events.map((row) => ({ ...row, fecha: displayTime(row.fecha) })), configuracion: { pais: config.country, zona_horaria: config.timezone, redes: config.officeNetworks, smtp_configurado: validEmail(config.mailFrom), alertas_configuradas: validEmail(alertEmail), correo_alertas: alertEmail, pdf_disponible: true, geoip_disponible: Boolean(config.geoipDatabase && existsSync(config.geoipDatabase)), emisor: config.company } };
 }
 export async function saveUser(data, actor) {
   let id = integer(data.id ?? 0, 0); const name = textValue(data, 'nombre', 120); const username = textValue(data, 'usuario', 50);
   requireValue(/^[a-zA-Z0-9._-]{3,50}$/.test(username), 'Usuario inválido: usa de 3 a 50 letras, números, puntos o guiones.');
+  const email = data.correo === undefined ? undefined : textValue(data, 'correo', 254, false);
+  requireValue(email === undefined || !email || validEmail(email), 'Correo del usuario inválido.');
   const birth = textValue(data, 'fecha_nacimiento', 10); requireValue(validDate(birth) && birth <= localClock().date, 'Fecha de nacimiento inválida.');
   const role = data.rol; requireValue(['administrador', 'facturador'].includes(role), 'Rol inválido.');
   const active = flag(data, 'activo'); const permanent = flag(data, 'bloqueado_permanente'); const remote = flag(data, 'remoto');
@@ -44,14 +48,14 @@ export async function saveUser(data, actor) {
     requireValue(!admins.some((row) => Number(row.id) === id) || admins.length > 1 || (active && !permanent && role === 'administrador'), 'Debe quedar un administrador activo.');
     const values = [name, username, birth, role, active, permanent, remote, reason];
     if (id) {
-      const [existing] = await query('SELECT id FROM vendedores WHERE id=?', [id], connection); requireValue(existing, 'Usuario no encontrado.', 404);
-      await query('UPDATE vendedores SET nombre=?,usuario=?,fecha_nacimiento=?,rol=?,activo=?,bloqueado_permanente=?,remoto=?,motivo_bloqueo=? WHERE id=?', [...values, id], connection);
+      const [existing] = await query('SELECT id,correo FROM vendedores WHERE id=?', [id], connection); requireValue(existing, 'Usuario no encontrado.', 404);
+      await query('UPDATE vendedores SET nombre=?,usuario=?,fecha_nacimiento=?,rol=?,activo=?,bloqueado_permanente=?,remoto=?,motivo_bloqueo=?,correo=? WHERE id=?', [...values, email === undefined ? existing.correo : email || null, id], connection);
       if (hash) await query('UPDATE vendedores SET clave=? WHERE id=?', [hash, id], connection); if (id !== Number(actor.id)) await revokeSessions(id, connection); else if (hash) await query('DELETE FROM sesiones WHERE vendedor_id=? AND id<>?', [id,actor.sesion_id], connection);
     } else {
-      id = Number((await query('INSERT INTO vendedores (nombre,usuario,fecha_nacimiento,rol,activo,bloqueado_permanente,remoto,motivo_bloqueo,clave) VALUES (?,?,?,?,?,?,?,?,?)', [...values, hash], connection)).insertId);
+      id = Number((await query('INSERT INTO vendedores (nombre,usuario,fecha_nacimiento,rol,activo,bloqueado_permanente,remoto,motivo_bloqueo,clave,correo) VALUES (?,?,?,?,?,?,?,?,?,?)', [...values, hash, email || null], connection)).insertId);
       for (let day = 1; day <= 5; day++) await query("INSERT INTO horarios_acceso (vendedor_id,dia,inicio,fin) VALUES (?,?,'08:00:00','17:00:00')", [id, day], connection);
     }
-    await audit(actor.id, 'guardar_usuario', id, connection); return { id };
+    await audit(actor.id, 'guardar_usuario', id, connection, {usuario:username,rol:role,activo:active,bloqueado_permanente:permanent,remoto:remote,clave_actualizada:Boolean(hash)}); return { id };
   });
 }
 export function validateSchedules(rows) {
@@ -66,13 +70,37 @@ export function validateSchedules(rows) {
 }
 export async function adminAction(action, data, actor) {
   if (action === 'user') return saveUser(data, actor);
-  if (action === 'schedule') {
+  if ((action === 'block' && data.tipo === 'permanente') || action === 'unblock-permanent') {
+    const id = integer(data.vendedor_id); const blocked = action === 'block';
+    requireValue(!blocked || id !== Number(actor.id), 'No puedes bloquear permanentemente tu propia cuenta.');
+    const reason = blocked ? textValue(data, 'motivo', 180) : '';
+    await transaction(async (connection) => {
+      const admins = await query("SELECT id FROM vendedores WITH (UPDLOCK,HOLDLOCK) WHERE rol='administrador' AND activo=1 AND bloqueado_permanente=0", [], connection);
+      const [user] = await query('SELECT id FROM vendedores WITH (UPDLOCK,HOLDLOCK) WHERE id=?', [id], connection);
+      requireValue(user, 'Usuario no encontrado.', 404);
+      requireValue(!blocked || !admins.some(row => Number(row.id) === id) || admins.length > 1, 'Debe quedar un administrador activo.');
+      await query('UPDATE vendedores SET bloqueado_permanente=?,motivo_bloqueo=? WHERE id=?', [Number(blocked), reason, id], connection);
+      await revokeSessions(id, connection);
+      await audit(actor.id, blocked ? 'bloquear_permanente' : 'quitar_bloqueo_permanente', id, connection, {motivo:reason});
+    });
+    return { ok: true };
+  }
+  if (action === 'mail-settings') {
+    const email = textValue(data, 'correo_alertas', 254);
+    requireValue(validEmail(email), 'Correo de alertas inválido.');
+    await transaction(async (connection) => {
+      const previous = await query('SELECT clave FROM configuracion WITH (UPDLOCK,HOLDLOCK) WHERE clave=?', ['correo_alertas'], connection);
+      if (previous.length) await query('UPDATE configuracion SET valor=? WHERE clave=?', [email, 'correo_alertas'], connection);
+      else await query('INSERT INTO configuracion (clave,valor) VALUES (?,?)', ['correo_alertas', email], connection);
+      await audit(actor.id, 'guardar_correo_alertas', 'correo_alertas', connection);
+    });
+  } else if (action === 'schedule') {
     const id = integer(data.vendedor_id); const rows = validateSchedules(data.horarios);
     await transaction(async (connection) => {
       const [user] = await query('SELECT id FROM vendedores WITH (UPDLOCK,HOLDLOCK) WHERE id=?', [id], connection); requireValue(user, 'Usuario no encontrado.', 404);
       await query('DELETE FROM horarios_acceso WHERE vendedor_id=?', [id], connection);
       for (const row of rows) await query('INSERT INTO horarios_acceso (vendedor_id,dia,inicio,fin) VALUES (?,?,?,?)', [id, row.dia, row.inicio, row.fin], connection);
-      if (id !== Number(actor.id)) await revokeSessions(id, connection); await audit(actor.id, 'guardar_horario', id, connection);
+      if (id !== Number(actor.id)) await revokeSessions(id, connection); await audit(actor.id, 'guardar_horario', id, connection, {horarios:rows});
     });
   } else if (action === 'block') {
     const id = integer(data.vendedor_id); requireValue(id !== Number(actor.id), 'No puedes crear un bloqueo para tu propia cuenta.');
