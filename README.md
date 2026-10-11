@@ -146,39 +146,54 @@ La migración es transaccional y se registra en `schema_migrations` para evitar 
 
 </details>
 
-## Cambiar correos desde Administración
+## Docker
 
-En **Administración → Usuarios → Usuarios y permisos**, pulsa **Editar** en cualquier cuenta, incluida la del administrador, cambia **Correo electrónico** y pulsa **Guardar usuario**. Deja la contraseña vacía para conservarla. El correo es opcional para permitir cuentas existentes sin dirección registrada; si se completa, se valida su formato.
+La opción más rápida para ejecutar el proyecto completo (app + SQL Server 2022) con sólo Docker y Docker Compose. La pila reutiliza el mismo [.env](.env.example): dentro del contenedor sólo se fuerzan `DB_AUTH=sql` y `DB_HOST=db`, porque la autenticación de Windows (`msnodesqlv8`/ODBC) no está disponible en Linux. El SMTP, `COMPANY_*` y el resto de variables se aplican tal cual.
 
-En **Correo de alertas del administrador**, cambia el destinatario y pulsa **Guardar correo de alertas**. Este correo se configura por separado del correo personal de cada cuenta. El cambio queda guardado en SQL Server y se aplica a nuevas alertas sin reiniciar; los mensajes ya en cola conservan su destinatario. Sólo los administradores pueden realizar estos cambios y las operaciones quedan auditadas.
+### Arranque de desarrollo
 
-Para actualizar una instalación existente, ejecuta `pnpm db:migrate` antes de usar la nueva versión. La migración `002_correos_administrables` agrega los campos necesarios sin modificar los correos de clientes ni los datos históricos.
+1. Preparar el entorno (PowerShell: `Copy-Item .env.example .env`) y definir en `.env`:
 
-## Navegación y uso de Administración
+   | Variable | Uso |
+   | --- | --- |
+   | `BOOTSTRAP_ADMIN_PASSWORD` | Contraseña del `admin`, de 12 a 200 caracteres (ya obligatoria para `pnpm setup`) |
+   | `MSSQL_SA_PASSWORD` | Contraseña del `sa` del contenedor SQL Server; 8+ caracteres con mayúsculas, minúsculas y números. Distinta de `DB_PASS` |
+   | `DB_PASS` | Contraseña del login de la aplicación (`DB_USER`). En el primer arranque el contenedor la crea automáticamente con esa contraseña |
 
-Administración se divide en ocho vistas con enlaces propios: Resumen, Usuarios, Horarios, Bloqueos, Festivos, Correos, Actividad y Configuración. El resumen ofrece accesos directos y contadores; los registros de actividad y correo muestran hasta los últimos 200 resultados disponibles.
+2. Levantar la pila:
 
-En Usuarios, consulta el listado o pulsa **Crear usuario** / **Editar** para abrir el formulario. Usa **Cancelar** para cerrarlo. Los errores aparecen junto al formulario y conservan lo escrito. Los listados de administración, clientes, productos e historial incluyen búsqueda por texto y páginas de diez registros; la búsqueda ignora mayúsculas y acentos.
+   ```bash
+   docker compose up --build
+   ```
 
-Horarios muestra sólo facturadores y conserva la selección después de guardar. Bloqueos excluye la cuenta administradora en uso. Los enlaces permiten volver con los botones del navegador y recargar una sección directamente. En móvil, el menú se cierra al elegir una vista, tocar fuera o pulsar Escape.
+   En el primer arranque el contenedor espera a SQL Server, crea el login `DB_USER` con `MSSQL_SA_PASSWORD` (la app nunca ve la cuenta `sa`), crea la base y aplica el esquema (equivale a `pnpm db:install`) y crea el `admin` (equivale a `pnpm setup`). Repetir el comando es inocuo: el login se ajusta a `DB_PASS`, la instalación se omite si la base ya tiene tablas y el admin existente no se sobrescribe.
 
-### Editor semanal de horarios
+Abrir **[http://localhost:3000/facturacion/](http://localhost:3000/facturacion/)** e ingresar con `admin` y `BOOTSTRAP_ADMIN_PASSWORD`. Los datos persisten en el volumen `mssql-data`; el puerto de la app es `3000` (`APP_PORT` lo cambia) y SQL Server queda sólo en la red interna.
 
-En **Administración → Horarios**, busca un facturador y selecciónalo. Cada día permite activar o desactivar el acceso, agregar varias sesiones y ajustar sus horas. Las plantillas de lunes a viernes ofrecen jornada continua (08:00–17:00) o con almuerzo (08:00–12:00 y 13:00–17:00). También puedes copiar las sesiones del lunes a martes–viernes.
+> **Acceso y ubicación:** en contenedor las peticiones llegan desde la red de Docker, no desde `localhost`, y el sistema rechaza las ubicaciones desconocidas. Por eso compose usa `OFFICE_NETWORKS=172.31.31.0/24` (la red interna de la pila) mientras `.env` no defina otras redes. En un despliegue real, define en `.env` las redes de oficina reales junto con GeoIP.
 
-El resumen muestra las horas efectivas y los días con acceso. Las horas inválidas o superpuestas se señalan en el día correspondiente e impiden guardar. Los cambios sólo se aplican al pulsar **Guardar horario**; **Descartar cambios** recupera la última versión guardada. Cambiar de usuario o seguir un enlace con cambios pendientes solicita confirmación. Quitar todas las sesiones requiere confirmar que el usuario quedará sin acceso.
+### Entorno productivo (proxy TLS)
 
-El horario usa la zona indicada en pantalla. Una cuenta inactiva o bloqueada continúa sin acceso aunque tenga un horario válido.
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
 
-### Bloqueo permanente
+La segunda plantilla ([docker-compose.prod.yml](docker-compose.prod.yml)) convierte el mismo servicio `app` en modo producción (`APP_ENV=production`), deja de publicar su puerto y añade un proxy nginx con TLS, siguiendo el modelo de [deploy/nginx-facturacion.conf](deploy/nginx-facturacion.conf). Comparte red y base de datos con el perfil dev:
 
-En **Administración → Bloqueos**, selecciona el usuario, elige **Bloqueo permanente**, indica el motivo y pulsa **Crear bloqueo**. Se aplica inmediatamente, cierra sus sesiones y no requiere fechas. Aparece en el listado de bloqueos permanentes, desde donde puedes quitarlo. Al quitarlo se conservan los demás permisos y restricciones. El sistema impide bloquear tu propia cuenta o dejar sin administradores activos la instalación.
+- La primera vez, `tls-init` genera un certificado autofirmado en el volumen `tls-certs`. Para usar certificados propios, colocar `fullchain.pem` y `privkey.pem` en ese volumen.
+- `APP_ORIGIN` debe coincidir exactamente con el origen que muestra el navegador, esquema y puerto incluidos: `https://localhost:8443` para probar en local. Si no coincide, el API responde `403 Origen no autorizado`.
+- Abrir **[https://localhost:8443/facturacion/](https://localhost:8443/facturacion/)** y aceptar el aviso del certificado autofirmado. El puerto es `HTTPS_PORT` (por defecto 8443).
+- `TRUSTED_PROXIES` lo fija la plantilla a la IP fija del proxy (`172.31.31.20`); el servidor sólo acepta la cabecera `X-Forwarded-Proto` desde esa IP.
 
-## Facturar sin registrar un cliente
+### Comandos con Docker
 
-Para consumidor final, deja **Cliente (opcional)** en **Sin cliente · Consumidor final**. El comprobante se guarda con ese nombre y permite descargar o imprimir el PDF, sin crear un cliente en el catálogo ni enviar correos. Si seleccionas un cliente registrado, se mantiene el envío a su correo.
-
-El crédito fiscal sigue requiriendo un cliente contribuyente con sus datos completos.
+| Comando | Descripción |
+| --- | --- |
+| `docker compose exec app pnpm test` | Ejecuta las pruebas locales dentro del contenedor |
+| `docker compose logs -f app` | Sigue los registros de la app |
+| `docker compose exec app node --env-file=.env scripts/verify-smtp.js` | Verifica conexión y autenticación SMTP |
+| `docker compose down` | Detiene la pila conservando los datos |
+| `docker compose down -v` | Detiene la pila y elimina la base de datos |
 
 ## IVA y comisiones
 
@@ -296,16 +311,24 @@ DAW-Sistema-de-Facturaci-n/
 ├── database/
 │   ├── schema.sql            Esquema T-SQL inicial
 │   └── migrations/           Migraciones de SQL Server
-├── deploy/                   Configuración de Nginx
+├── deploy/
+│   ├── docker/               Configuración nginx del perfil prod Docker
+│   ├── create-sql-login.js   Crea el login de la app en el SQL del contenedor
+│   ├── docker-entrypoint.sh  Arranque del contenedor: login, base, setup y servidor
+│   └── nginx-facturacion.conf  Configuración de Nginx
 ├── scripts/                  Instalación, migración y diagnósticos
 ├── server/                   API, acceso, cálculos, PDF y correo
 ├── storage/                  Archivos locales generados
 ├── tests/                    Pruebas locales e integración
+├── .dockerignore             Exclusiones del build de imagen
 ├── .env.example              Plantilla de desarrollo
 ├── .env.docker.example       Plantilla de producción con Docker
 ├── Dockerfile               Imagen de la aplicación
 ├── compose.yaml             Aplicación y proxy HTTPS
 ├── .env.test.example         Plantilla de integración
+├── Dockerfile                Imagen multi etapa de la aplicación
+├── docker-compose.yml        Pila dev: app + SQL Server 2022
+├── docker-compose.prod.yml   Combinación productiva con proxy TLS
 ├── index.html                Entrada de la interfaz
 └── package.json              Dependencias y comandos
 ```

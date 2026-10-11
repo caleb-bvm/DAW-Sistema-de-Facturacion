@@ -1,0 +1,77 @@
+# Docker Compose para el sistema de facturación (perfil dev).
+#
+#   docker compose up --build
+#
+# App en http://localhost:3000/facturacion/ y SQL Server 2022 interno.
+# Para el entorno productivo con proxy TLS usar docker-compose.prod.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Reutiliza .env para la configuración de la aplicación (SMTP real, COMPANY_*,
+# BOOTSTRAP_ADMIN_PASSWORD, DB_PASS, etc.). Sólo MSSQL_SA_PASSWORD es
+# exclusivo de Docker. En contenedor se fuerzan DB_AUTH=sql y DB_HOST=db: la
+# autenticación de Windows no está disponible en Linux. El entry point crea el
+# login DB_USER (con MSSQL_SA_PASSWORD) si no existe y después instala la base.
+
+x-app: &app
+  build:
+    context: .
+  image: facturacion-app:latest
+  env_file:
+    - .env
+  restart: unless-stopped
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?Define MSSQL_SA_PASSWORD en .env con 8+ caracteres (mayúsculas, minúsculas y números)}"
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      # Imágenes recientes traen sqlcmd en mssql-tools18 (requiere -C para
+      # certificados autofirmados); la alternativa cubre imágenes más antiguas.
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S 127.0.0.1 -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -b -Q \"SELECT 1\" -o /dev/null || /opt/mssql-tools/bin/sqlcmd -S 127.0.0.1 -U sa -P \"$$MSSQL_SA_PASSWORD\" -b -Q \"SELECT 1\" -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - facturacion
+
+  app:
+    <<: *app
+    environment:
+      APP_ENV: development
+      HOST: 0.0.0.0
+      PORT: "3000"
+      DB_AUTH: sql
+      DB_HOST: db
+      DB_PORT: "1433"
+      DB_INSTANCE: ""
+      DB_TRUST_CERTIFICATE: "true"
+      # En contenedor el cliente se ve desde la puerta de enlace de la red
+      # compose, no desde loopback: sin red de oficina el acceso se rechaza
+      # por ubicación desconocida. Se amplía la oficina a la red del contenedor
+      # salvo que .env defina OFFICE_NETWORKS (reales) explícitamente.
+      OFFICE_NETWORKS: ${OFFICE_NETWORKS:-172.31.31.0/24}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - facturacion
+
+networks:
+  facturacion:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.31.0/24
+
+volumes:
+  mssql-data:
