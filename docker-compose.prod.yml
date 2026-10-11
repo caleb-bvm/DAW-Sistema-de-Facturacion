@@ -1,0 +1,62 @@
+# Configuración productiva: sustituye docker-compose.yml al combinarse con él.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Convierte el servicio `app` en modo producción (APP_ENV=production) detrás de
+# un proxy nginx con TLS. APP_ENV=production exige HTTPS: el proxy termina el
+# cifrado y reenvía X-Forwarded-Proto desde una IP fija y única (172.31.31.20),
+# la única listada en TRUSTED_PROXIES. El puerto de la app deja de publicarse;
+# sólo el proxy expone HTTPS_PORT (por defecto 8443).
+
+services:
+  app:
+    environment:
+      APP_ENV: production
+      APP_ORIGIN: ${APP_ORIGIN:-https://localhost:8443}
+      TRUSTED_PROXIES: 172.31.31.20/32
+    ports: !override []
+    networks:
+      facturacion:
+        ipv4_address: 172.31.31.10
+
+  # Genera un certificado autofirmado la primera vez. Para usar certs reales,
+  # colocarlos en el volumen tls-certs como fullchain.pem y privkey.pem antes
+  # del primer arranque (o sustituirlos después y reiniciar el proxy).
+  tls-init:
+    image: alpine:3.20
+    command:
+      - sh
+      - -c
+      - |
+        apk add --no-cache openssl >/dev/null
+        if [ ! -f /certs/fullchain.pem ] || [ ! -f /certs/privkey.pem ]; then
+          echo "Generando certificado TLS autofirmado para ${TLS_CN:-localhost}..."
+          openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+            -keyout /certs/privkey.pem -out /certs/fullchain.pem \
+            -subj "/CN=${TLS_CN:-localhost}" \
+            -addext "subjectAltName=DNS:${TLS_CN:-localhost},DNS:localhost,IP:127.0.0.1"
+        else
+          echo "Certificados existentes en tls-certs; se conservan."
+        fi
+    volumes:
+      - tls-certs:/certs
+
+  proxy:
+    image: nginx:1.27-alpine
+    depends_on:
+      app:
+        condition: service_started
+      tls-init:
+        condition: service_completed_successfully
+    ports:
+      - "${HTTPS_PORT:-8443}:443"
+    volumes:
+      - ./deploy/docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - tls-certs:/certs:ro
+    restart: unless-stopped
+    networks:
+      facturacion:
+        ipv4_address: 172.31.31.20
+
+volumes:
+  tls-certs:

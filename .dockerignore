@@ -1,0 +1,26 @@
+# Control de la imagen: excluye lo que no debe entrar en el build.
+.git
+.gitignore
+
+# Dependencias del anfitrión: la imagen las instala con pnpm.
+node_modules
+.pnpm-store
+
+# Configuración privada: llega por compose (env_file), nunca embebida.
+.env
+.env.*
+
+# Artefactos generados y basura del sistema.
+storage
+test-output
+coverage
+.nyc_output
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.codex-remote-attachments
+.DS_Store
+Thumbs.db
+Desktop.ini
