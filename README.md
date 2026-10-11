@@ -325,3 +325,7 @@ DAW-Sistema-de-Facturaci-n/
 - Las líneas permiten buscar productos por código o descripción, detectan duplicados y limitan el descuento al importe de la línea. En pantallas pequeñas se muestran como tarjetas.
 - Administración → Actividad ofrece búsqueda, categoría, estado, fechas UTC, paginación y detalle del evento. Las horas del listado se presentan en la zona configurada. Los correos muestran su último estado, no cada intento histórico.
 - La migración `003_detalle_auditoria.sql` añade contexto a las nuevas operaciones (IP, origen y datos relevantes, sin contraseñas ni tokens). Los eventos antiguos conservan sus datos originales.
+
+### Empresa de demostración
+
+El sistema incluye los datos ficticios de **Zona Digital**, dedicada a la venta de equipos informáticos, accesorios y servicios de soporte técnico en San Salvador, El Salvador. El NIT `0614-150326-101-3`, NRC `345678-9`, dirección y teléfono son inventados para demostración; el correo `contacto@zonadigital.example` utiliza un dominio de ejemplo. Los valores se configuran mediante `COMPANY_*` en `.env`. Reiniciar el servidor después de cambiarlos. Los comprobantes ya emitidos conservan los datos históricos del emisor.

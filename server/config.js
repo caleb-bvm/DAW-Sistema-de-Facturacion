@@ -13,5 +13,14 @@ export const config = {
   geoipDatabase: process.env.GEOIP_DATABASE || '', sessionMinutes: Number(process.env.SESSION_MINUTES || 30),
   smtp: { host: process.env.SMTP_HOST || '127.0.0.1', port: Number(process.env.SMTP_PORT || 25), secure: process.env.SMTP_SECURE === 'true', requireTLS: process.env.SMTP_REQUIRE_TLS === 'true', user: process.env.SMTP_USER || '', password: process.env.SMTP_PASSWORD || '' },
   mailFrom: process.env.MAIL_FROM || '', adminEmail: process.env.ADMIN_EMAIL || '',
-  company: { nombre: process.env.COMPANY_NAME || 'Empresa de demostración', nit: process.env.COMPANY_NIT || '', nrc: process.env.COMPANY_NRC || '', actividad: process.env.COMPANY_ACTIVITY || '', direccion: process.env.COMPANY_ADDRESS || 'El Salvador', telefono: process.env.COMPANY_PHONE || '', correo: process.env.COMPANY_EMAIL || '' },
+  // Datos ficticios para la empresa de demostración.
+  company: {
+    nombre: process.env.COMPANY_NAME || 'Zona Digital',
+    nit: process.env.COMPANY_NIT || '0614-150326-101-3',
+    nrc: process.env.COMPANY_NRC || '345678-9',
+    actividad: process.env.COMPANY_ACTIVITY || 'Venta de equipos informáticos, accesorios y servicios de soporte técnico',
+    direccion: process.env.COMPANY_ADDRESS || 'Avenida Innovación, edificio Pixel, local 12, San Salvador, El Salvador',
+    telefono: process.env.COMPANY_PHONE || '+503 2000-0123',
+    correo: process.env.COMPANY_EMAIL || 'contacto@zonadigital.example',
+  },
 };
