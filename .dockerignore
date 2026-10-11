@@ -1,0 +1,14 @@
+# Only runtime files and dependency manifests enter the build context.
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!index.html
+!server/
+!server/**
+!assets/
+!assets/**
+!scripts/
+!scripts/**
+!database/
+!database/**
