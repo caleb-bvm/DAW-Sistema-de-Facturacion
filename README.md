@@ -123,6 +123,55 @@ La migración es transaccional y se registra en `schema_migrations` para evitar 
 
 </details>
 
+## Docker
+
+La opción más rápida para ejecutar el proyecto completo (app + SQL Server 2022) con sólo Docker y Docker Compose. La pila reutiliza el mismo [.env](.env.example): dentro del contenedor sólo se fuerzan `DB_AUTH=sql` y `DB_HOST=db`, porque la autenticación de Windows (`msnodesqlv8`/ODBC) no está disponible en Linux. El SMTP, `COMPANY_*` y el resto de variables se aplican tal cual.
+
+### Arranque de desarrollo
+
+1. Preparar el entorno (PowerShell: `Copy-Item .env.example .env`) y definir en `.env`:
+
+   | Variable | Uso |
+   | --- | --- |
+   | `BOOTSTRAP_ADMIN_PASSWORD` | Contraseña del `admin`, de 12 a 200 caracteres (ya obligatoria para `pnpm setup`) |
+   | `MSSQL_SA_PASSWORD` | Contraseña del `sa` del contenedor SQL Server; 8+ caracteres con mayúsculas, minúsculas y números. Distinta de `DB_PASS` |
+   | `DB_PASS` | Contraseña del login de la aplicación (`DB_USER`). En el primer arranque el contenedor la crea automáticamente con esa contraseña |
+
+2. Levantar la pila:
+
+   ```bash
+   docker compose up --build
+   ```
+
+   En el primer arranque el contenedor espera a SQL Server, crea el login `DB_USER` con `MSSQL_SA_PASSWORD` (la app nunca ve la cuenta `sa`), crea la base y aplica el esquema (equivale a `pnpm db:install`) y crea el `admin` (equivale a `pnpm setup`). Repetir el comando es inocuo: el login se ajusta a `DB_PASS`, la instalación se omite si la base ya tiene tablas y el admin existente no se sobrescribe.
+
+Abrir **[http://localhost:3000/facturacion/](http://localhost:3000/facturacion/)** e ingresar con `admin` y `BOOTSTRAP_ADMIN_PASSWORD`. Los datos persisten en el volumen `mssql-data`; el puerto de la app es `3000` (`APP_PORT` lo cambia) y SQL Server queda sólo en la red interna.
+
+> **Acceso y ubicación:** en contenedor las peticiones llegan desde la red de Docker, no desde `localhost`, y el sistema rechaza las ubicaciones desconocidas. Por eso compose usa `OFFICE_NETWORKS=172.31.31.0/24` (la red interna de la pila) mientras `.env` no defina otras redes. En un despliegue real, define en `.env` las redes de oficina reales junto con GeoIP.
+
+### Entorno productivo (proxy TLS)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+La segunda plantilla ([docker-compose.prod.yml](docker-compose.prod.yml)) convierte el mismo servicio `app` en modo producción (`APP_ENV=production`), deja de publicar su puerto y añade un proxy nginx con TLS, siguiendo el modelo de [deploy/nginx-facturacion.conf](deploy/nginx-facturacion.conf). Comparte red y base de datos con el perfil dev:
+
+- La primera vez, `tls-init` genera un certificado autofirmado en el volumen `tls-certs`. Para usar certificados propios, colocar `fullchain.pem` y `privkey.pem` en ese volumen.
+- `APP_ORIGIN` debe coincidir exactamente con el origen que muestra el navegador, esquema y puerto incluidos: `https://localhost:8443` para probar en local. Si no coincide, el API responde `403 Origen no autorizado`.
+- Abrir **[https://localhost:8443/facturacion/](https://localhost:8443/facturacion/)** y aceptar el aviso del certificado autofirmado. El puerto es `HTTPS_PORT` (por defecto 8443).
+- `TRUSTED_PROXIES` lo fija la plantilla a la IP fija del proxy (`172.31.31.20`); el servidor sólo acepta la cabecera `X-Forwarded-Proto` desde esa IP.
+
+### Comandos con Docker
+
+| Comando | Descripción |
+| --- | --- |
+| `docker compose exec app pnpm test` | Ejecuta las pruebas locales dentro del contenedor |
+| `docker compose logs -f app` | Sigue los registros de la app |
+| `docker compose exec app node --env-file=.env scripts/verify-smtp.js` | Verifica conexión y autenticación SMTP |
+| `docker compose down` | Detiene la pila conservando los datos |
+| `docker compose down -v` | Detiene la pila y elimina la base de datos |
+
 ## IVA y comisiones
 
 Los precios gravados incluyen el IVA del 13 %. Por línea, el sistema calcula `precio × cantidad − descuento`, divide el resultado entre `1.13` para obtener la base y determina el IVA por diferencia. Los productos exentos y no sujetos conservan su clasificación y no extraen IVA.
@@ -238,14 +287,22 @@ DAW-Sistema-de-Facturaci-n/
 ├── database/
 │   ├── schema.sql            Esquema T-SQL inicial
 │   └── migrations/           Migraciones de SQL Server
-├── deploy/                   Configuración de Nginx
+├── deploy/
+│   ├── docker/               Configuración nginx del perfil prod Docker
+│   ├── create-sql-login.js   Crea el login de la app en el SQL del contenedor
+│   ├── docker-entrypoint.sh  Arranque del contenedor: login, base, setup y servidor
+│   └── nginx-facturacion.conf  Configuración de Nginx
 ├── scripts/                  Instalación, migración y diagnósticos
 ├── server/                   API, acceso, cálculos, PDF y correo
 ├── storage/                  Archivos locales generados
 ├── tests/                    Pruebas locales e integración
+├── .dockerignore             Exclusiones del build de imagen
 ├── .env.example              Plantilla de desarrollo
 ├── .env.production.example   Plantilla de producción
 ├── .env.test.example         Plantilla de integración
+├── Dockerfile                Imagen multi etapa de la aplicación
+├── docker-compose.yml        Pila dev: app + SQL Server 2022
+├── docker-compose.prod.yml   Combinación productiva con proxy TLS
 ├── index.html                Entrada de la interfaz
 └── package.json              Dependencias y comandos
 ```
