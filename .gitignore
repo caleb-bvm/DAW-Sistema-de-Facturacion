@@ -24,6 +24,8 @@ pnpm-debug.log*
 /storage/*
 !/storage/.htaccess
 !/storage/.gitkeep
+/deploy/geoip/*
+!/deploy/geoip/.gitkeep
 
 # Archivos locales de Codex y del sistema operativo
 /.codex-remote-attachments/

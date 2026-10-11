@@ -33,6 +33,7 @@ export const baseDatos = {
   obtenerSesion() { return request('session'); },
   cerrarSesion() { return request('logout', { method: 'POST', body: '{}' }); },
   guardarCliente(cliente) { return request('client', { method: 'POST', body: JSON.stringify(cliente) }); },
+  obtenerLogs(filtros = {}) { return request('admin-logs&' + new URLSearchParams(filtros)); },
   obtenerAdministracion() { return request('admin-data'); },
   administrar(accion, datos) { return request(`admin-${accion}`, { method: 'POST', body: JSON.stringify(datos) }); },
   reenviarFactura(id) { return request('resend', { method: 'POST', body: JSON.stringify({ id: Number(id) }) }); },

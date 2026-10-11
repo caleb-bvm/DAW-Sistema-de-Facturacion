@@ -26,7 +26,7 @@ Aplicación desarrollada para la asignatura de Desarrollo de Aplicaciones Web (D
 | Facturación | CF y CCF, historial, PDF, reenvío y anulación por administrador |
 | Catálogos | Clientes, sucursales y productos gravados, exentos y no sujetos |
 | Cálculos | IVA incluido, descuentos y comisiones por línea sin IVA |
-| Usuarios | Roles de administrador y facturador, horarios y permiso remoto |
+| Usuarios | Roles de administrador y facturador, correos editables, horarios y permiso remoto |
 | Acceso | Festivos, vacaciones, bloqueos, redes de oficina y país permitido |
 | Seguridad | Contraseñas con scrypt, sesiones en servidor, protección CSRF y auditoría |
 | Correo | PDF adjunto, cola persistente, reintentos y alertas de acceso |
@@ -55,6 +55,29 @@ flowchart LR
 Las clases de cálculo de la interfaz demuestran herencia y polimorfismo mediante el contrato `calcular()`. El servidor valida los importes usando los precios del catálogo antes de guardar.
 
 ## Instalación
+
+### Despliegue en servidor con Docker
+
+Se incluyen `Dockerfile`, `compose.yaml` y un proxy Caddy con HTTPS automático. La aplicación corre sin privilegios y se conecta a un **SQL Server externo mediante autenticación SQL**.
+
+Copia `.env.docker.example` a `.env.docker`, completa dominio, conexión SQL, correo y redes de oficina, y sigue la [guía de despliegue Docker](deploy/DOCKER.md) para construir la imagen, preparar la base y arrancar los servicios. La guía incluye comprobaciones, migraciones, respaldos y actualizaciones.
+
+### Acceso rápido desde PowerShell o Visual Studio Code
+
+En una instalación que ya tiene dependencias, `.env` y base de datos configurados, abre la terminal en la carpeta del proyecto:
+
+```powershell
+npm.cmd run acceso
+npm.cmd start
+```
+
+`acceso` muestra todos los usuarios existentes con su rol y estado. Escribe el usuario que quieres usar (Enter selecciona `admin`). Si existe, escribe `CAMBIAR` para restablecer su contraseña; si no existe, el asistente permite elegir entre administrador y facturador. Al restablecer una cuenta existente se conserva su rol. Puedes escribir una contraseña de 12 a 200 caracteres —no se muestra mientras la escribes— o pulsar Enter para generar una, que se muestra una sola vez. Cancelar no cambia las credenciales. El comando no requiere buscar ni editar la contraseña en `.env`.
+
+Abre la dirección que muestra el servidor y conserva la terminal abierta. **Ctrl + C** detiene el servidor. Estos comandos funcionan sin instalar pnpm si las dependencias ya están instaladas. `npm.cmd` evita el bloqueo de scripts de PowerShell que puede afectar a `npm.ps1`.
+
+El restablecimiento cierra las sesiones de esa cuenta y conserva sus permisos y bloqueos. También puedes gestionar las contraseñas desde **Administración → Usuarios → Usuarios y permisos → Editar** y asigna una nueva contraseña. Las claves se guardan como hashes y no se pueden recuperar como texto; el comando local permite reemplazarlas.
+
+En un servidor nuevo, configura la conexión SQL en `.env`, instala las dependencias y ejecuta `npm.cmd run db:install`, luego `npm.cmd run acceso` y `npm.cmd start`. Si la base ya existe, utiliza `npm.cmd run db:migrate` en lugar de `db:install`. El asistente se ejecuta en la consola del servidor; no es una página pública para restablecer contraseñas.
 
 ### Requisitos
 
@@ -105,7 +128,7 @@ pnpm start
 
 Abrir **[http://localhost:3000/facturacion/](http://localhost:3000/facturacion/)** e ingresar con el usuario `admin` y la contraseña configurada en `BOOTSTRAP_ADMIN_PASSWORD`. Si `APP_BASE_PATH` está vacío, abrir [http://localhost:3000/](http://localhost:3000/).
 
-`db:install` crea la base si hace falta y aplica el esquema y la migración inicial. Requiere permisos para crear la base y su estructura, y rechaza bases que ya tengan tablas. `setup` crea `admin` sólo si no existe; repetir el comando no restablece su contraseña.
+`db:install` crea la base si hace falta y aplica el esquema y todas las migraciones. Requiere permisos para crear la base y su estructura, y rechaza bases que ya tengan tablas. `setup` crea `admin` sólo si no existe; repetir el comando no restablece su contraseña.
 
 Los vendedores de demostración empiezan inactivos y sin contraseña utilizable. Desde la administración se les asigna contraseña, se activan y se configuran sus horarios. Se incluyen productos y sucursales de demostración.
 
@@ -196,6 +219,7 @@ Los cálculos usan centavos enteros y redondean por línea antes de sumar. El PD
 | `pnpm db:install` | Prepara una base nueva o vacía |
 | `pnpm db:migrate` | Migra una base SQL Server con la estructura inicial |
 | `pnpm setup` | Protege contraseñas iniciales y crea el administrador si falta |
+| `npm.cmd run acceso` | Asistente para crear usuarios y restablecer contraseñas de administradores y facturadores |
 | `pnpm mail` | Procesa un lote de correos pendientes |
 | `pnpm test` | Ejecuta las pruebas locales |
 | `pnpm test:integration` | Ejecuta la prueba integral de SQL Server |
@@ -250,7 +274,7 @@ Fuera de las redes autorizadas, el acceso requiere permiso remoto por usuario y 
 <details>
 <summary><strong>Correo SMTP y diagnósticos</strong></summary>
 
-Configurar `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_REQUIRE_TLS`, `SMTP_USER`, `SMTP_PASSWORD` y `MAIL_FROM`. `ADMIN_EMAIL` recibe las alertas de acceso. Las plantillas contienen un servidor de ejemplo que debe ajustarse a la instalación. Para TLS implícito en el puerto 465, usar `SMTP_SECURE=true` y `SMTP_REQUIRE_TLS=false`.
+Configurar `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_REQUIRE_TLS`, `SMTP_USER`, `SMTP_PASSWORD` y `MAIL_FROM`. `ADMIN_EMAIL` define el destinatario inicial de alertas de acceso, hasta que se guarde uno desde Administración. Las plantillas contienen un servidor de ejemplo que debe ajustarse a la instalación. Para TLS implícito en el puerto 465, usar `SMTP_SECURE=true` y `SMTP_REQUIRE_TLS=false`.
 
 La factura y su correo pendiente se guardan en una misma transacción. La cola se procesa cada minuto y después de emitir o reenviar. Cada correo dispone de hasta cinco intentos automáticos con espera creciente y reintento manual de fallidos. La aceptación por SMTP no confirma entrega en la bandeja del destinatario.
 
@@ -269,7 +293,7 @@ Configurar SPF, DKIM y DMARC del dominio para favorecer la entrega.
 <details>
 <summary><strong>Despliegue con HTTPS y Nginx</strong></summary>
 
-Usar [.env.production.example](.env.production.example) como plantilla para `.env`, completar credenciales, datos `COMPANY_*`, redes autorizadas y GeoIP. Configurar `APP_ENV=production`, `APP_ORIGIN=https://tu-dominio.com` y `DB_TRUST_CERTIFICATE=false`.
+Para Docker con HTTPS incluido, seguir la [guía Docker](deploy/DOCKER.md) y usar [.env.docker.example](.env.docker.example). Para una instalación directa de Node detrás de Nginx, partir de [.env.example](.env.example), completar credenciales, datos `COMPANY_*`, redes autorizadas y GeoIP. Configurar `APP_ENV=production`, `APP_ORIGIN=https://tu-dominio.com` y `DB_TRUST_CERTIFICATE=false`.
 
 `APP_ORIGIN` contiene sólo el origen; la subruta se define mediante `APP_BASE_PATH`. La plantilla utiliza `/facturacion`. El servidor redirige `/facturacion` a `/facturacion/` y limita la cookie de sesión a esa ruta.
 
@@ -298,7 +322,9 @@ DAW-Sistema-de-Facturaci-n/
 ├── tests/                    Pruebas locales e integración
 ├── .dockerignore             Exclusiones del build de imagen
 ├── .env.example              Plantilla de desarrollo
-├── .env.production.example   Plantilla de producción
+├── .env.docker.example       Plantilla de producción con Docker
+├── Dockerfile               Imagen de la aplicación
+├── compose.yaml             Aplicación y proxy HTTPS
 ├── .env.test.example         Plantilla de integración
 ├── Dockerfile                Imagen multi etapa de la aplicación
 ├── docker-compose.yml        Pila dev: app + SQL Server 2022
@@ -313,3 +339,16 @@ DAW-Sistema-de-Facturaci-n/
 - [Reglas de IVA incluido y comisiones](REQUISITOS-IVA-Y-COMISIONES.md).
 - [Plantilla de configuración local](.env.example).
 - [Configuración del proxy Nginx](deploy/nginx-facturacion.conf).
+
+
+### Mejoras de captura y actividad
+
+- Productos y clientes muestran el catálogo y abren el formulario con **Nuevo** o **Editar**. Los datos fiscales del cliente se despliegan al activar crédito fiscal.
+- Nueva factura conserva el borrador al navegar a otras vistas, durante la sesión de la pestaña. Recargar o cerrar sesión lo descarta. **Vaciar borrador** permite empezar de nuevo.
+- Las líneas permiten buscar productos por código o descripción, detectan duplicados y limitan el descuento al importe de la línea. En pantallas pequeñas se muestran como tarjetas.
+- Administración → Actividad ofrece búsqueda, categoría, estado, fechas UTC, paginación y detalle del evento. Las horas del listado se presentan en la zona configurada. Los correos muestran su último estado, no cada intento histórico.
+- La migración `003_detalle_auditoria.sql` añade contexto a las nuevas operaciones (IP, origen y datos relevantes, sin contraseñas ni tokens). Los eventos antiguos conservan sus datos originales.
+
+### Empresa de demostración
+
+El sistema incluye los datos ficticios de **Zona Digital**, dedicada a la venta de equipos informáticos, accesorios y servicios de soporte técnico en San Salvador, El Salvador. El NIT `0614-150326-101-3`, NRC `345678-9`, dirección y teléfono son inventados para demostración; el correo `contacto@zonadigital.example` utiliza un dominio de ejemplo. Los valores se configuran mediante `COMPANY_*` en `.env`. Reiniciar el servidor después de cambiarlos. Los comprobantes ya emitidos conservan los datos históricos del emisor.

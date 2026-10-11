@@ -1,0 +1,7 @@
+ALTER TABLE vendedores ADD correo NVARCHAR(254) NULL;
+GO
+CREATE TABLE configuracion (
+ clave NVARCHAR(100) PRIMARY KEY,
+ valor NVARCHAR(254) NOT NULL
+);
+GO

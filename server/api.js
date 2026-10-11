@@ -1,3 +1,4 @@
+import { listLogs } from './logs.js';
 import { timingSafeEqual } from 'node:crypto';
 import { query, transaction, sqlNow } from './db.js';
 import { config } from './config.js';
@@ -25,11 +26,12 @@ export async function dispatch(request, response, url, data) {
     if (!await verifyPassword(password, user?.clave)) { await recordAttempt(username, user?.id ?? null, 'credenciales', location); throw new RequestError('Usuario o contraseña incorrectos.', 401); }
     const reason = await restriction(user, location);
     if (reason) { await recordAttempt(username, user.id, reason, location); throw new RequestError(reason === 'permanente' ? 'Tu cuenta está bloqueada permanentemente. Contacta al administrador.' : 'Tu acceso no está permitido en este momento.', 403); }
+    await audit(user.id,'iniciar_sesion',user.usuario);
     const session = await createSession(user.id, readToken(request)); response.setHeader('Set-Cookie', sessionCookie(session.token)); return { usuario: publicUser(user), csrf: session.csrf };
   }
   if (action === 'logout' && method === 'POST') {
     const token = readToken(request);
-    if (token) { const [session] = await query('SELECT csrf FROM sesiones WHERE token_hash=?', [tokenHash(token)]); if (session) { validateCsrf(session, request); await query('DELETE FROM sesiones WHERE token_hash=?', [tokenHash(token)]); } }
+    if (token) { const [session] = await query('SELECT csrf,vendedor_id FROM sesiones WHERE token_hash=?', [tokenHash(token)]); if (session) { validateCsrf(session, request); await audit(session.vendedor_id,'cerrar_sesion',session.vendedor_id); await query('DELETE FROM sesiones WHERE token_hash=?', [tokenHash(token)]); } }
     response.setHeader('Set-Cookie', sessionCookie('', true)); return { ok: true };
   }
   const user = await requireSession(request); if (method === 'POST') validateCsrf(user, request);
@@ -64,6 +66,7 @@ export async function dispatch(request, response, url, data) {
     await invoiceData(id, user); const reason = textValue(data, 'motivo', 250);
     await transaction(async (connection) => { await query("UPDATE facturas SET estado='anulada',motivo_anulacion=? WHERE id=?", [reason, id], connection); await audit(user.id, 'anulacion_academica', id, connection); }); return { ok: true };
   }
+  if (action === 'admin-logs' && method === 'GET') return listLogs(Object.fromEntries(url.searchParams));
   if (action === 'admin-data' && method === 'GET') return adminData();
   if (action.startsWith('admin-') && method === 'POST') return adminAction(action.slice(6), data, user);
   throw new RequestError('Operación no encontrada.', 404);

@@ -12,6 +12,7 @@
     "db:install": "node --env-file-if-exists=.env scripts/install.js",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.js",
     "setup": "node --env-file-if-exists=.env scripts/setup.js",
+    "acceso": "node --env-file-if-exists=.env scripts/access.js",
     "mail": "node --env-file-if-exists=.env scripts/mail-worker.js",
     "test:integration": "node --env-file=.env --env-file=.env.test --test tests/sqlserver.integration.test.js"
   },

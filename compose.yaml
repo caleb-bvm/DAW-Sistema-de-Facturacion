@@ -1,0 +1,77 @@
+name: facturacion
+
+services:
+  app:
+    build: .
+    image: facturacion:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    init: true
+    env_file: .env.docker
+    environment:
+      NODE_ENV: production
+      APP_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      DB_AUTH: sql
+      DB_INSTANCE: ""
+      # Trust only Caddy's fixed address, never the entire Docker subnet.
+      TRUSTED_PROXIES: ${DOCKER_PROXY_IP:-172.30.80.2}
+    expose:
+      - "3000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - storage:/app/storage
+      - ./deploy/geoip:/app/geoip:ro
+    networks:
+      backend: {}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Define APP_DOMAIN in .env.docker}
+      ACME_EMAIL: ${ACME_EMAIL:?Define ACME_EMAIL in .env.docker}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      backend:
+        ipv4_address: ${DOCKER_PROXY_IP:-172.30.80.2}
+    depends_on:
+      app:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  backend:
+    ipam:
+      config:
+        - subnet: ${DOCKER_SUBNET:-172.30.80.0/24}
+          ip_range: ${DOCKER_DYNAMIC_RANGE:-172.30.80.128/25}
+
+volumes:
+  storage:
+  caddy_data:
+  caddy_config:
