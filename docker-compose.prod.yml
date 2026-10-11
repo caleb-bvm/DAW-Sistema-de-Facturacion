@@ -19,9 +19,11 @@ services:
       facturacion:
         ipv4_address: 172.31.31.10
 
-  # Genera un certificado autofirmado la primera vez. Para usar certs reales,
-  # colocarlos en el volumen tls-certs como fullchain.pem y privkey.pem antes
-  # del primer arranque (o sustituirlos después y reiniciar el proxy).
+  # Genera un certificado autofirmado la primera vez. TLS_CN admite un nombre
+  # DNS o una IP (por ejemplo la dirección del servidor en la red local) y se
+  # refleja en el SAN correcto. Para usar certs reales, colocarlos en el
+  # volumen tls-certs como fullchain.pem y privkey.pem antes del primer
+  # arranque (o sustituirlos después y reiniciar el proxy).
   tls-init:
     image: alpine:3.20
     command:
@@ -30,11 +32,16 @@ services:
       - |
         apk add --no-cache openssl >/dev/null
         if [ ! -f /certs/fullchain.pem ] || [ ! -f /certs/privkey.pem ]; then
-          echo "Generando certificado TLS autofirmado para ${TLS_CN:-localhost}..."
+          CN="${TLS_CN:-localhost}"
+          case "$$CN" in
+            *[!0-9.:]*) SAN="DNS:$$CN" ;;
+            *) SAN="IP:$$CN" ;;
+          esac
+          echo "Generando certificado TLS autofirmado para $$CN ($$SAN)..."
           openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
             -keyout /certs/privkey.pem -out /certs/fullchain.pem \
-            -subj "/CN=${TLS_CN:-localhost}" \
-            -addext "subjectAltName=DNS:${TLS_CN:-localhost},DNS:localhost,IP:127.0.0.1"
+            -subj "/CN=$$CN" \
+            -addext "subjectAltName=$$SAN,DNS:localhost,IP:127.0.0.1"
         else
           echo "Certificados existentes en tls-certs; se conservan."
         fi
