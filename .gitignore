@@ -1,6 +1,5 @@
 # Dependencias y caché del gestor de paquetes
 node_modules/
-/vendor/
 .pnpm-store/
 
 # Configuración privada (conservar las plantillas de ejemplo)
@@ -8,7 +7,6 @@ node_modules/
 .env.*
 !.env.example
 !.env.*.example
-/config/local.php
 
 # Resultados de pruebas y cobertura
 /test-output/
@@ -21,9 +19,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-/storage/*
-!/storage/.htaccess
-!/storage/.gitkeep
+# Respaldos locales de versiones anteriores (no forman parte de la aplicación)
+/storage/
 /deploy/geoip/*
 !/deploy/geoip/.gitkeep
 

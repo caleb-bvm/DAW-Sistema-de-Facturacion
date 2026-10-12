@@ -13,7 +13,7 @@ function inspect(secure) {
     socket.on('error', fail);
     socket.on('data', (chunk) => {
       received += chunk.toString();
-      if (!greeting && /^220 /m.test(received)) { greeting = true; received = ''; socket.write('EHLO ourpxi.dev\r\n'); }
+      if (!greeting && /^220 /m.test(received)) { greeting = true; received = ''; socket.write('EHLO localhost\r\n'); }
       else if (greeting && /^250 /m.test(received)) {
         const auth = received.match(/^250[ -]AUTH[ =]([^\r\n]+)/im)?.[1] || 'No anunciado';
         const starttls = /^250[ -]STARTTLS\b/im.test(received);

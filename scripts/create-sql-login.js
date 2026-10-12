@@ -1,5 +1,5 @@
 // Aprovisiona el login de la aplicación en SQL Server usando la cuenta sa del
-// contenedor. Lo ejecuta deploy/docker-entrypoint.sh antes de install: si el
+// contenedor de desarrollo. Se ejecuta manualmente antes de db:install: si el
 // login (DB_USER) no existe, se crea con DB_PASS; si existe, la contraseña se
 // ajusta a DB_PASS para que .env sea la fuente de verdad. Se añade a sysadmin
 // porque db:install necesita crear la base y aplicar el esquema; en un SQL

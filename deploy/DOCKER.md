@@ -86,7 +86,7 @@ docker compose --env-file .env.docker ps
 
 Ejecuta cada paso sólo si el anterior terminó correctamente. Durante las migraciones habrá una ventana de mantenimiento. Si falla la migración, revisa el error antes de levantar la nueva versión. Volver a una imagen anterior exige comprobar su compatibilidad con el esquema; para cambios incompatibles, restaura también el respaldo de SQL Server.
 
-La base externa conserva facturas, usuarios, sesiones, auditoría y cola de correo. Los PDF actuales se generan en memoria. El volumen `storage` queda disponible para archivos persistentes; respáldalo si se utiliza. Respalda también `.env.docker`, certificados y archivos GeoIP por un canal privado. No uses `docker compose down -v` para actualizar: elimina los volúmenes.
+La base externa conserva facturas, usuarios, sesiones, auditoría y cola de correo. Los PDF se generan en memoria. Respalda también `.env.docker`, certificados y archivos GeoIP por un canal privado. No uses `docker compose down -v` para actualizar: elimina los volúmenes.
 
 Para detener manteniendo los datos:
 
@@ -96,6 +96,6 @@ docker compose --env-file .env.docker down
 
 ## Detalles de la imagen
 
-La instalación usa el lockfile de pnpm y sólo dependencias de producción. Se omiten scripts de instalación porque `msnodesqlv8` es el controlador nativo de Windows y la imagen utiliza el controlador JavaScript de `mssql` con autenticación SQL. El contexto de construcción excluye secretos, dependencias locales y archivos de pruebas. La aplicación corre con el usuario `node`, sistema de archivos de sólo lectura, directorio temporal y volumen de almacenamiento. Recibe SIGTERM para el cierre del servidor y sus conexiones.
+La instalación usa el lockfile de pnpm y sólo dependencias de producción. Se omiten scripts de instalación porque `msnodesqlv8` es el controlador nativo de Windows y la imagen utiliza el controlador JavaScript de `mssql` con autenticación SQL. El contexto de construcción excluye secretos, dependencias locales y archivos de pruebas. La aplicación corre con el usuario `node`, sistema de archivos de sólo lectura y directorio temporal. Recibe SIGTERM para el cierre del servidor y sus conexiones.
 
 Las imágenes base siguen las etiquetas `node:22-bookworm-slim` y `caddy:2-alpine` para recibir correcciones al reconstruir/descargar. En un proceso de versiones estricto, fija sus digests después de validar cada actualización.

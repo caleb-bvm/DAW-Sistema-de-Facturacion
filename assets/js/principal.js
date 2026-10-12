@@ -43,7 +43,7 @@ function notify(message, type = 'success') {
 async function refreshData() {
   const [catalogs, invoices] = await Promise.all([
     baseDatos.obtenerCatalogos(),
-    baseDatos.obtenerFacturas(state.user.id)
+    baseDatos.obtenerFacturas()
   ]);
   state.products = catalogs.productos;
   state.branches = catalogs.sucursales;
@@ -89,7 +89,6 @@ function mostrarInicioSesion() {
   disposeAdministration();
   state.user = null;
   state.invoiceDraft = null;
-  sessionStorage.removeItem('seller');
   document.querySelector('#application').hidden = true;
   document.querySelector('#login-view').hidden = false;
   document.querySelector('#login-form').reset();
@@ -383,7 +382,7 @@ function emptyState(icon, title) {
   return `<div class="card empty"><span class="material-symbols-rounded">${icon}</span><h3>${title}</h3></div>`;
 }
 
-// La identidad se recupera desde el servidor; sessionStorage no concede permisos.
+// La identidad se recupera desde la sesión del servidor.
 try {
   const session = await baseDatos.obtenerSesion();
   state.user = session.usuario;

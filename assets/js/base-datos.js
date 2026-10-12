@@ -52,7 +52,7 @@ export const baseDatos = {
   obtenerCatalogos() {
     return request('catalogs');
   },
-  obtenerFacturas(vendedorId) {
+  obtenerFacturas() {
     return request('invoices');
   },
   obtenerFactura(id) {

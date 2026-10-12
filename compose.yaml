@@ -22,7 +22,6 @@ services:
     tmpfs:
       - /tmp:size=64m,mode=1777
     volumes:
-      - storage:/app/storage
       - ./deploy/geoip:/app/geoip:ro
     networks:
       backend: {}
@@ -72,6 +71,5 @@ networks:
           ip_range: ${DOCKER_DYNAMIC_RANGE:-172.30.80.128/25}
 
 volumes:
-  storage:
   caddy_data:
   caddy_config:

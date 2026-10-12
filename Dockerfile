@@ -15,7 +15,6 @@ COPY --chown=node:node server ./server
 COPY --chown=node:node assets ./assets
 COPY --chown=node:node scripts ./scripts
 COPY --chown=node:node database ./database
-RUN mkdir -p storage && chown node:node storage
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD ["node", "scripts/docker-healthcheck.js"]

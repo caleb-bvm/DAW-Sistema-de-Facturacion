@@ -158,15 +158,22 @@ La opción más rápida para ejecutar el proyecto completo (app + SQL Server 202
    | --- | --- |
    | `BOOTSTRAP_ADMIN_PASSWORD` | Contraseña del `admin`, de 12 a 200 caracteres (ya obligatoria para `pnpm setup`) |
    | `MSSQL_SA_PASSWORD` | Contraseña del `sa` del contenedor SQL Server; 8+ caracteres con mayúsculas, minúsculas y números. Distinta de `DB_PASS` |
-   | `DB_PASS` | Contraseña del login de la aplicación (`DB_USER`). En el primer arranque el contenedor la crea automáticamente con esa contraseña |
+   | `DB_PASS` | Contraseña del login de la aplicación (`DB_USER`), creado en el paso de preparación |
 
-2. Levantar la pila:
+2. Preparar una base nueva y levantar la pila. Especifica `docker-compose.yml`: sin `-f`, Docker elige `compose.yaml`, que corresponde al despliegue con SQL externo y Caddy.
 
    ```bash
-   docker compose up --build
+   docker compose -f docker-compose.yml up -d db
+   docker compose -f docker-compose.yml build app
+   docker compose -f docker-compose.yml run --rm app node scripts/create-sql-login.js
+   docker compose -f docker-compose.yml run --rm app npm run db:install
+   docker compose -f docker-compose.yml run --rm app npm run setup
+   docker compose -f docker-compose.yml up -d app
    ```
 
-   En el primer arranque el contenedor espera a SQL Server, crea el login `DB_USER` con `MSSQL_SA_PASSWORD` (la app nunca ve la cuenta `sa`), crea la base y aplica el esquema (equivale a `pnpm db:install`) y crea el `admin` (equivale a `pnpm setup`). Repetir el comando es inocuo: el login se ajusta a `DB_PASS`, la instalación se omite si la base ya tiene tablas y el admin existente no se sobrescribe.
+   El script `create-sql-login.js` usa `MSSQL_SA_PASSWORD` para crear el login `DB_USER` con `DB_PASS`; si existe, actualiza su contraseña. Le concede `sysadmin` para preparar la base de demostración, por lo que este asistente corresponde al entorno de desarrollo. Para producción con permisos limitados y SQL externo, sigue la [guía Docker](deploy/DOCKER.md).
+
+   Ejecuta cada comando sólo si el anterior terminó correctamente. La imagen inicia únicamente el servidor: la preparación se hace explícitamente. En arranques posteriores utiliza `docker compose -f docker-compose.yml up -d`; para actualizar una base existente ejecuta `npm run db:migrate` con `run --rm app` en lugar de `db:install`.
 
 Abrir **[http://localhost:3000/facturacion/](http://localhost:3000/facturacion/)** e ingresar con `admin` y `BOOTSTRAP_ADMIN_PASSWORD`. Los datos persisten en el volumen `mssql-data`; el puerto de la app es `3000` (`APP_PORT` lo cambia) y SQL Server queda sólo en la red interna.
 
@@ -189,11 +196,12 @@ La segunda plantilla ([docker-compose.prod.yml](docker-compose.prod.yml)) convie
 
 | Comando | Descripción |
 | --- | --- |
-| `docker compose exec app pnpm test` | Ejecuta las pruebas locales dentro del contenedor |
-| `docker compose logs -f app` | Sigue los registros de la app |
-| `docker compose exec app node --env-file=.env scripts/verify-smtp.js` | Verifica conexión y autenticación SMTP |
-| `docker compose down` | Detiene la pila conservando los datos |
-| `docker compose down -v` | Detiene la pila y elimina la base de datos |
+| `docker compose -f docker-compose.yml logs -f app` | Sigue los registros de la app |
+| `docker compose -f docker-compose.yml exec app node scripts/verify-smtp.js` | Verifica conexión y autenticación SMTP |
+| `docker compose -f docker-compose.yml down` | Detiene la pila conservando los datos |
+| `docker compose -f docker-compose.yml down -v` | Detiene la pila y elimina la base de datos |
+
+Las pruebas se ejecutan en el repositorio con `pnpm test`; la imagen sólo contiene los archivos de ejecución y las dependencias de producción.
 
 ## IVA y comisiones
 
@@ -313,20 +321,18 @@ DAW-Sistema-de-Facturaci-n/
 │   └── migrations/           Migraciones de SQL Server
 ├── deploy/
 │   ├── docker/               Configuración nginx del perfil prod Docker
-│   ├── create-sql-login.js   Crea el login de la app en el SQL del contenedor
-│   ├── docker-entrypoint.sh  Arranque del contenedor: login, base, setup y servidor
+│   ├── Caddyfile             Proxy HTTPS para SQL Server externo
+│   ├── DOCKER.md             Guía de despliegue con SQL Server externo
 │   └── nginx-facturacion.conf  Configuración de Nginx
 ├── scripts/                  Instalación, migración y diagnósticos
 ├── server/                   API, acceso, cálculos, PDF y correo
-├── storage/                  Archivos locales generados
 ├── tests/                    Pruebas locales e integración
 ├── .dockerignore             Exclusiones del build de imagen
 ├── .env.example              Plantilla de desarrollo
 ├── .env.docker.example       Plantilla de producción con Docker
-├── Dockerfile               Imagen de la aplicación
-├── compose.yaml             Aplicación y proxy HTTPS
+├── compose.yaml              Aplicación y proxy Caddy; SQL Server externo
 ├── .env.test.example         Plantilla de integración
-├── Dockerfile                Imagen multi etapa de la aplicación
+├── Dockerfile                Imagen de ejecución de la aplicación
 ├── docker-compose.yml        Pila dev: app + SQL Server 2022
 ├── docker-compose.prod.yml   Combinación productiva con proxy TLS
 ├── index.html                Entrada de la interfaz

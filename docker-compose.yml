@@ -1,6 +1,6 @@
 # Docker Compose para el sistema de facturación (perfil dev).
 #
-#   docker compose up --build
+#   docker compose -f docker-compose.yml up -d --build
 #
 # App en http://localhost:3000/facturacion/ y SQL Server 2022 interno.
 # Para el entorno productivo con proxy TLS usar docker-compose.prod.yml:
@@ -10,8 +10,8 @@
 # Reutiliza .env para la configuración de la aplicación (SMTP real, COMPANY_*,
 # BOOTSTRAP_ADMIN_PASSWORD, DB_PASS, etc.). Sólo MSSQL_SA_PASSWORD es
 # exclusivo de Docker. En contenedor se fuerzan DB_AUTH=sql y DB_HOST=db: la
-# autenticación de Windows no está disponible en Linux. El entry point crea el
-# login DB_USER (con MSSQL_SA_PASSWORD) si no existe y después instala la base.
+# autenticación de Windows no está disponible en Linux. La preparación del
+# login, la base y el administrador se ejecuta manualmente; consultar README.md.
 
 x-app: &app
   build:
